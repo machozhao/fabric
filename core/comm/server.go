@@ -15,6 +15,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 )
 
@@ -120,6 +121,9 @@ func NewGRPCServerFromListener(listener net.Listener, secureConfig SecureServerC
 
 	//set up our server options
 	var serverOpts []grpc.ServerOption
+	serverOpts = append(serverOpts, grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor))
+	serverOpts = append(serverOpts, grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor))
+
 	//check secureConfig
 	if secureConfig.UseTLS {
 		//both key and cert are required
@@ -172,6 +176,10 @@ func NewGRPCServerFromListener(listener net.Listener, secureConfig SecureServerC
 	serverOpts = append(serverOpts, ServerKeepaliveOptions()...)
 
 	grpcServer.server = grpc.NewServer(serverOpts...)
+
+	// Register Prometheus and metrics handler.
+	logger.Infof("Boundle prometheus with NewGRPCServerFromListener on [%s]", listener.Addr().String())
+	grpc_prometheus.Register(grpcServer.server)
 
 	return grpcServer, nil
 }
