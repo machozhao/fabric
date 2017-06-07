@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package discovery
@@ -314,7 +304,13 @@ func createDiscoveryInstanceThatGossips(port int, id string, bootstrapPeers []st
 	}
 	s := grpc.NewServer()
 
-	discSvc := NewDiscoveryService(bootstrapPeers, self, comm, comm, pol)
+	discSvc := NewDiscoveryService(self, comm, comm, pol)
+	for _, bootPeer := range bootstrapPeers {
+		discSvc.Connect(NetworkMember{Endpoint: bootPeer, InternalEndpoint: bootPeer}, func() (*PeerIdentification, error) {
+			return &PeerIdentification{SelfOrg: true, ID: common.PKIidType(bootPeer)}, nil
+		})
+	}
+
 	gossInst := &gossipInstance{comm: comm, gRGCserv: s, Discovery: discSvc, lsnr: ll, shouldGossip: shouldGossip, port: port}
 
 	proto.RegisterGossipServer(s, gossInst)
@@ -580,7 +576,7 @@ func TestGossipDiscoverySkipConnectingToLocalhostBootstrap(t *testing.T) {
 	inst := createDiscoveryInstance(11611, "d1", []string{"localhost:11611", "127.0.0.1:11611"})
 	inst.comm.lock.Lock()
 	inst.comm.mock = &mock.Mock{}
-	inst.comm.mock.On("SendToPeer", mock.Anything).Run(func(mock.Arguments) {
+	inst.comm.mock.On("SendToPeer", mock.Anything, mock.Anything).Run(func(mock.Arguments) {
 		t.Fatal("Should not have connected to any peer")
 	})
 	inst.comm.mock.On("Ping", mock.Anything).Run(func(mock.Arguments) {
@@ -806,21 +802,6 @@ func TestConfigFromFile(t *testing.T) {
 	assert.Equal(t, time.Duration(25)*time.Second, getReconnectInterval())
 }
 
-func TestFilterOutLocalhost(t *testing.T) {
-	t.Parallel()
-	endpoints := []string{"localhost:5611", "127.0.0.1:5611", "1.2.3.4:5611"}
-	assert.Len(t, filterOutLocalhost(endpoints, 5611), 1)
-	endpoints = []string{"1.2.3.4:5611"}
-	assert.Len(t, filterOutLocalhost(endpoints, 5611), 1)
-	endpoints = []string{"localhost:5611", "127.0.0.1:5611"}
-	assert.Len(t, filterOutLocalhost(endpoints, 5611), 0)
-	// Check slice returned is a copy
-	endpoints = []string{"localhost:5611", "127.0.0.1:5611", "1.2.3.4:5611"}
-	endpoints2 := filterOutLocalhost(endpoints, 5611)
-	endpoints2[0] = "bla bla"
-	assert.NotEqual(t, endpoints[2], endpoints[0])
-}
-
 func TestMsgStoreExpiration(t *testing.T) {
 	// Starts 4 instances, wait for membership to build, stop 2 instances
 	// Check that membership in 2 running instances become 2
@@ -975,7 +956,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
 
 	// Checking is Alive was processed
 	for i := 0; i < peersNum; i++ {
-		checkAliveMsgExist(instances, aliveMsgs, i, "[Step 1 - proccessing aliveMsg]")
+		checkAliveMsgExist(instances, aliveMsgs, i, "[Step 1 - processing aliveMsg]")
 	}
 
 	// Creating MembershipResponse while all instances have full membership

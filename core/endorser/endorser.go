@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package endorser
@@ -24,8 +14,6 @@ import (
 	"golang.org/x/net/context"
 
 	"errors"
-
-	"bytes"
 
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
@@ -43,6 +31,19 @@ import (
 	pb "github.com/hyperledger/fabric/protos/peer"
 	putils "github.com/hyperledger/fabric/protos/utils"
 )
+
+// >>>>> begin errors section >>>>>
+//chaincodeError is a fabric error signifying error from chaincode
+type chaincodeError struct {
+	status int32
+	msg    string
+}
+
+func (ce chaincodeError) Error() string {
+	return fmt.Sprintf("chaincode error (status: %d, message: %s)", ce.status, ce.msg)
+}
+
+// <<<<< end errors section <<<<<<
 
 var endorserLogger = flogging.MustGetLogger("endorser")
 
@@ -116,10 +117,10 @@ func (e *Endorser) callChaincode(ctxt context.Context, chainID string, version s
 		return nil, nil, err
 	}
 
-	//per doc anything < 500 can be sent as TX.
-	//fabric errors will always be >= 500 (ie, unambiguous errors )
-	//"lscc" will respond with status 200 or >=500 (ie, unambiguous OK or ERROR)
-	if res.Status >= shim.ERROR {
+	//per doc anything < 400 can be sent as TX.
+	//fabric errors will always be >= 400 (ie, unambiguous errors )
+	//"lscc" will respond with status 200 or 500 (ie, unambiguous OK or ERROR)
+	if res.Status >= shim.ERRORTHRESHOLD {
 		return res, nil, nil
 	}
 
@@ -231,30 +232,9 @@ func (e *Endorser) simulateProposal(ctx context.Context, chainID string, txid st
 		}
 		version = cdLedger.Version
 
-		// we retrieve info about this chaincode from the file system
-		ccpack, err := ccprovider.GetChaincodeFromFS(cid.Name, version)
+		err = ccprovider.CheckInsantiationPolicy(cid.Name, version, cdLedger)
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("chaincode %s/%s not found on the file system, error %s", cid.Name, version, err)
-		}
-		// ccpack is guaranteed to be non-nil
-		cdLocalFS := ccpack.GetChaincodeData()
-
-		// we have the info from the fs, check that the policy
-		// matches the one on the file system if one was specified;
-		// this check is required because the admin of this peer
-		// might have specified instantiation policies for their
-		// chaincode, for example to make sure that the chaincode
-		// is only instantiated on certain channels; a malicious
-		// peer on the other hand might have created a deploy
-		// transaction that attempts to bypass the instantiation
-		// policy. This check is there to ensure that this will not
-		// happen, i.e. that the peer will refuse to invoke the
-		// chaincode under these conditions. More info on
-		// https://jira.hyperledger.org/browse/FAB-3156
-		if cdLocalFS.InstantiationPolicy != nil {
-			if !bytes.Equal(cdLocalFS.InstantiationPolicy, cdLedger.InstantiationPolicy) {
-				return nil, nil, nil, nil, fmt.Errorf("instantiation policy mismatch for cc %s/%s", cid.Name, version)
-			}
+			return nil, nil, nil, nil, err
 		}
 	} else {
 		version = util.GetSysCCVersion()
@@ -357,7 +337,7 @@ func (e *Endorser) endorseProposal(ctx context.Context, chainID string, txid str
 		return nil, err
 	}
 
-	if res.Status >= shim.ERROR {
+	if res.Status >= shim.ERRORTHRESHOLD {
 		return &pb.ProposalResponse{Response: res}, nil
 	}
 
@@ -477,7 +457,7 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	}
 	if res != nil {
 		if res.Status >= shim.ERROR {
-			endorserLogger.Debugf("simulateProposal() resulted in chaincode error for txid: %s", txid)
+			endorserLogger.Errorf("simulateProposal() resulted in chaincode response status %d for txid: %s", res.Status, txid)
 			var cceventBytes []byte
 			if ccevent != nil {
 				cceventBytes, err = putils.GetBytesChaincodeEvent(ccevent)
@@ -489,7 +469,8 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 			if err != nil {
 				return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
 			}
-			return pResp, nil
+
+			return pResp, &chaincodeError{res.Status, res.Message}
 		}
 	}
 
@@ -506,9 +487,9 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
 		}
 		if pResp != nil {
-			if res.Status >= shim.ERROR {
+			if res.Status >= shim.ERRORTHRESHOLD {
 				endorserLogger.Debugf("endorseProposal() resulted in chaincode error for txid: %s", txid)
-				return pResp, nil
+				return pResp, &chaincodeError{res.Status, res.Message}
 			}
 		}
 	}

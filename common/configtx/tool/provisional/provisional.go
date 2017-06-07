@@ -19,6 +19,7 @@ package provisional
 import (
 	"fmt"
 
+	"github.com/hyperledger/fabric/common/cauthdsl"
 	"github.com/hyperledger/fabric/common/config"
 	configvaluesmsp "github.com/hyperledger/fabric/common/config/msp"
 	"github.com/hyperledger/fabric/common/configtx"
@@ -31,6 +32,7 @@ import (
 	cb "github.com/hyperledger/fabric/protos/common"
 	ab "github.com/hyperledger/fabric/protos/orderer"
 	pb "github.com/hyperledger/fabric/protos/peer"
+	"github.com/hyperledger/fabric/protos/utils"
 	logging "github.com/op/go-logging"
 )
 
@@ -72,6 +74,9 @@ const (
 
 	// BlockValidationPolicyKey TODO
 	BlockValidationPolicyKey = "BlockValidation"
+
+	// OrdererAdminsPolicy is the absolute path to the orderer admins policy
+	OrdererAdminsPolicy = "/Channel/Orderer/Admins"
 )
 
 type bootstrapper struct {
@@ -97,9 +102,12 @@ func New(conf *genesisconfig.Profile) Generator {
 	}
 
 	if conf.Orderer != nil {
+		// Orderer addresses
+		oa := config.TemplateOrdererAddresses(conf.Orderer.Addresses)
+		oa.Values[config.OrdererAddressesKey].ModPolicy = OrdererAdminsPolicy
+
 		bs.ordererGroups = []*cb.ConfigGroup{
-			// Orderer addresses
-			config.TemplateOrdererAddresses(conf.Orderer.Addresses),
+			oa,
 
 			// Orderer Config Types
 			config.TemplateConsensusType(conf.Orderer.OrdererType),
@@ -119,7 +127,7 @@ func New(conf *genesisconfig.Profile) Generator {
 		}
 
 		for _, org := range conf.Orderer.Organizations {
-			mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.BCCSP, org.ID)
+			mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.ID)
 			if err != nil {
 				logger.Panicf("1 - Error loading MSP configuration for org %s: %s", org.Name, err)
 			}
@@ -148,7 +156,7 @@ func New(conf *genesisconfig.Profile) Generator {
 			policies.TemplateImplicitMetaMajorityPolicy([]string{config.ApplicationGroupKey}, configvaluesmsp.AdminsPolicyKey),
 		}
 		for _, org := range conf.Application.Organizations {
-			mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.BCCSP, org.ID)
+			mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.ID)
 			if err != nil {
 				logger.Panicf("2- Error loading MSP configuration for org %s: %s", org.Name, err)
 			}
@@ -172,18 +180,36 @@ func New(conf *genesisconfig.Profile) Generator {
 	}
 
 	if conf.Consortiums != nil {
-		bs.consortiumsGroups = append(bs.consortiumsGroups, config.TemplateConsortiumsGroup())
+		tcg := config.TemplateConsortiumsGroup()
+		tcg.Groups[config.ConsortiumsGroupKey].ModPolicy = OrdererAdminsPolicy
+
+		// Fix for https://jira.hyperledger.org/browse/FAB-4373
+		// Note, AcceptAllPolicy in this context, does not grant any unrestricted
+		// access, but allows the /Channel/Admins policy to evaluate to true
+		// for the ordering system channel while set to MAJORITY with the addition
+		// to the successful evaluation of the /Channel/Orderer/Admins policy (which
+		// is not AcceptAll
+		tcg.Groups[config.ConsortiumsGroupKey].Policies[configvaluesmsp.AdminsPolicyKey] = &cb.ConfigPolicy{
+			Policy: &cb.Policy{
+				Type:  int32(cb.Policy_SIGNATURE),
+				Value: utils.MarshalOrPanic(cauthdsl.AcceptAllPolicy),
+			},
+		}
+
+		bs.consortiumsGroups = append(bs.consortiumsGroups, tcg)
+
 		for consortiumName, consortium := range conf.Consortiums {
-			bs.consortiumsGroups = append(
-				bs.consortiumsGroups,
-				config.TemplateConsortiumChannelCreationPolicy(consortiumName, policies.ImplicitMetaPolicyWithSubPolicy(
-					configvaluesmsp.AdminsPolicyKey,
-					cb.ImplicitMetaPolicy_ANY,
-				).Policy),
-			)
+			cg := config.TemplateConsortiumChannelCreationPolicy(consortiumName, policies.ImplicitMetaPolicyWithSubPolicy(
+				configvaluesmsp.AdminsPolicyKey,
+				cb.ImplicitMetaPolicy_ANY,
+			).Policy)
+
+			cg.Groups[config.ConsortiumsGroupKey].Groups[consortiumName].ModPolicy = OrdererAdminsPolicy
+			cg.Groups[config.ConsortiumsGroupKey].Groups[consortiumName].Values[config.ChannelCreationPolicyKey].ModPolicy = OrdererAdminsPolicy
+			bs.consortiumsGroups = append(bs.consortiumsGroups, cg)
 
 			for _, org := range consortium.Organizations {
-				mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.BCCSP, org.ID)
+				mspConfig, err := msp.GetVerifyingMspConfig(org.MSPDir, org.ID)
 				if err != nil {
 					logger.Panicf("3 - Error loading MSP configuration for org %s: %s", org.Name, err)
 				}
