@@ -17,6 +17,9 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
+	"net/http"
+	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/grpc/reflection"
 )
 
 //A SecureServerConfig structure is used to configure security (e.g. TLS) for a
@@ -64,6 +67,8 @@ type GRPCServer interface {
 	//SetClientRootCAs sets the list of authorities used to verify client
 	//certificates based on a list of PEM-encoded X509 certificate authorities
 	SetClientRootCAs(clientRoots [][]byte) error
+	// Start monitor for grpc server
+	BoudleAndStartGRPCMonitor(httpListener string)
 }
 
 type grpcServerImpl struct {
@@ -178,16 +183,36 @@ func NewGRPCServerFromListener(listener net.Listener, secureConfig SecureServerC
 
 	grpcServer.server = grpc.NewServer(serverOpts...)
 
-	// Register Prometheus and metrics handler.
-	logger.Infof("Boundle prometheus with NewGRPCServerFromListener on [%s]", listener.Addr().String())
-	grpc_prometheus.Register(grpcServer.server)
-
 	return grpcServer, nil
 }
 
 //Address returns the listen address for this GRPCServer instance
 func (gServer *grpcServerImpl) Address() string {
 	return gServer.address
+}
+
+//Address returns the listen address for this GRPCServer instance
+func (gServer *grpcServerImpl) BoudleAndStartGRPCMonitor(httpListener string) {
+	// Register Prometheus and metrics handler.
+	logger.Infof("Boundle prometheus with grpc server on [%s]", gServer.Address())
+	grpc_prometheus.Register(gServer.Server())
+
+	// Register Prometheus and metrics handler.
+	logger.Infof("Register prometheus handler /metrics for grpc [%s]", gServer.Address())
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", prometheus.Handler())
+
+	// Register reflection service on gRPC server.
+	logger.Infof("Register relection for prometheus for grpc [%s]", gServer.Address());
+	reflection.Register(gServer.Server())
+
+	logger.Infof("Starting prometheus listener http server on [%s] for grpc [%s]", httpListener, gServer.Address());
+	err := http.ListenAndServe(httpListener, mux)
+	if err != nil {
+		logger.Fatalf("Prometheus http ListenAndServe on [%s]: ", err, gServer.Address())
+	} else {
+		logger.Infof("Served prometheus http /metrics on [%s] for grpc [%s]", httpListener, gServer.Address());
+	}
 }
 
 //Listener returns the net.Listener for the GRPCServer instance

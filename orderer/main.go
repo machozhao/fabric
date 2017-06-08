@@ -75,6 +75,12 @@ func main() {
 		manager := initializeMultiChainManager(conf, signer)
 		server := NewServer(manager, signer)
 		ab.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
+
+		// Register and start prometheuse metrics service
+		go func() {
+			grpcServer.BoudleAndStartGRPCMonitor(":18080")
+		}();
+
 		logger.Info("Beginning to serve requests")
 		grpcServer.Start()
 	// "version" command

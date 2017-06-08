@@ -38,7 +38,6 @@ import (
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var chaincodeDevMode bool
@@ -215,23 +214,17 @@ func serve(args []string) error {
 
 	// Register and start prometheuse metrics service
 	go func() {
-		// Register Prometheus and metrics handler.
-		logger.Info("Register prometheus handler on /metrics")
-		http.Handle("/metrics", prometheus.Handler())
-
-		logger.Info("Starting prometheus listener http server on 18080");
-		err := http.ListenAndServe(":18080", nil)
-		if err != nil {
-			logger.Fatal("Prometheus http ListenAndServe: ", err)
-		} else {
-			logger.Info("Served prometheus http on 18080");
-		}
+		peerServer.BoudleAndStartGRPCMonitor(":18080")
 	}();
 
 
 	// Start the event hub server
 	if ehubGrpcServer != nil {
 		go ehubGrpcServer.Start()
+		// Register and start prometheuse metrics service
+		go func() {
+			ehubGrpcServer.BoudleAndStartGRPCMonitor(":18081")
+		}();
 	}
 
 	// Start profiling http endpoint if enabled
