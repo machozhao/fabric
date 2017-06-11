@@ -42,6 +42,10 @@ func TestMain(m *testing.M) {
 	os.Exit(testResult)
 }
 
+func TestInspectMissing(t *testing.T) {
+	assert.Error(t, doInspectBlock("NonSenseBlockFileThatDoesn'tActuallyExist"), "Missing block")
+}
+
 func TestInspectBlock(t *testing.T) {
 	blockDest := tmpDir + string(os.PathSeparator) + "block"
 
@@ -62,14 +66,18 @@ func TestMissingOrdererSection(t *testing.T) {
 	assert.Error(t, doOutputBlock(config, "foo", blockDest), "Missing orderer section")
 }
 
-func TestMissingConsortiumSection(t *testing.T) {
+func TestMissingConsortiumValue(t *testing.T) {
 	configTxDest := tmpDir + string(os.PathSeparator) + "configtx"
 
 	factory.InitFactories(nil)
 	config := genesisconfig.Load(genesisconfig.SampleSingleMSPChannelProfile)
 	config.Consortium = ""
 
-	assert.Error(t, doOutputChannelCreateTx(config, "foo", configTxDest), "Missing Consortium section in Application Profile definition")
+	assert.Error(t, doOutputChannelCreateTx(config, "foo", configTxDest), "Missing Consortium value in Application Profile definition")
+}
+
+func TestInspectMissingConfigTx(t *testing.T) {
+	assert.Error(t, doInspectChannelCreateTx("ChannelCreateTxFileWhichDoesn'tReallyExist"), "Missing channel create tx file")
 }
 
 func TestInspectConfigTx(t *testing.T) {

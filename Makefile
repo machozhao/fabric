@@ -34,8 +34,8 @@
 #   - unit-test-clean - cleans unit test state (particularly from docker)
 
 PROJECT_NAME   = hyperledger/fabric
-BASE_VERSION   = 1.0.0-alpha3
-PREV_VERSION   = 1.0.0-alpha2
+BASE_VERSION   = 1.0.0-rc1
+PREV_VERSION   = 1.0.0-beta
 IS_RELEASE     = false
 
 ifneq ($(IS_RELEASE),true)
@@ -284,7 +284,7 @@ build/goshim.tar.bz2: $(GOSHIM_DEPS)
 	@echo "Creating $@"
 	@tar -jhc -C $(GOPATH)/src $(patsubst $(GOPATH)/src/%,%,$(GOSHIM_DEPS)) > $@
 
-build/sampleconfig.tar.bz2:
+build/sampleconfig.tar.bz2: $(shell find sampleconfig -type f)
 	(cd sampleconfig && tar -jc *) > $@
 
 build/javashim.tar.bz2: $(JAVASHIM_DEPS)
@@ -349,6 +349,7 @@ release/%/install: $(PROJECT_FILES)
 		| sed -e 's/_NS_/$(DOCKER_NS)/g' \
 		| sed -e 's/_ARCH_/$(DOCKER_ARCH)/g' \
 		| sed -e 's/_VERSION_/$(PROJECT_VERSION)/g' \
+		| sed -e 's/_BASE_DOCKER_TAG_/$(BASE_DOCKER_TAG)/g' \
 		> $@/get-docker-images.sh
 		@chmod +x $@/get-docker-images.sh
 
