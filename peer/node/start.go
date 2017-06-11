@@ -183,7 +183,7 @@ func serve(args []string) error {
 		scc.DeploySysCCs(cid)
 	})
 
-	logger.Infof("Starting peer with ID==[%s], network ID=[%s], address=[%s]",
+	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]",
 		peerEndpoint.Id, viper.GetString("peer.networkId"), peerEndpoint.Address)
 
 	// Start the grpc server. Done in a goroutine so we can deploy the

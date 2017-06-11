@@ -67,3 +67,28 @@ services:
       - peer1.org1.example.com
       - peer0.org2.example.com
       - peer1.org2.example.com
+
+  grafana:
+      image: grafana/grafana
+      container_name: grafana
+      ports:
+        - "3000:3000"
+      links:
+        - prometheus:prometheus
+      depends_on:
+        - prometheus
+      environment:
+        - HTTP_USER=admin
+        - HTTP_PASS=admin
+
+  prometheus:
+      image: prom/prometheus
+      container_name: prometheus
+      ports:
+        - "9090:9090"
+      volumes:
+        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      depends_on:
+        - orderer.example.com
+        - peer0.org1.example.com
+

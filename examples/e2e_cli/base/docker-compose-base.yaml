@@ -30,6 +30,7 @@ services:
     - ../crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/:/var/hyperledger/orderer/tls
     ports:
       - 7050:7050
+      - 17050:18080
 
   peer0.org1.example.com:
     container_name: peer0.org1.example.com
@@ -48,6 +49,8 @@ services:
     ports:
       - 7051:7051
       - 7053:7053
+      - 18080:18080
+      - 18081:18081
 
   peer1.org1.example.com:
     container_name: peer1.org1.example.com
