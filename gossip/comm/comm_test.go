@@ -112,7 +112,6 @@ func newCommInstance(port int, sec api.MessageCryptoService) (Comm, error) {
 }
 
 type msgMutator func(*proto.SignedGossipMessage) *proto.SignedGossipMessage
-type msgConsumer func(*proto.SignedGossipMessage)
 
 type tlsType int
 
@@ -156,7 +155,7 @@ func handshaker(endpoint string, comm Comm, t *testing.T, connMutator msgMutator
 
 	pkiID := common.PKIidType(endpoint)
 	assert.NoError(t, err, "%v", err)
-	msg := c.createConnectionMsg(pkiID, clientCertHash, []byte(endpoint), func(msg []byte) ([]byte, error) {
+	msg, _ := c.createConnectionMsg(pkiID, clientCertHash, []byte(endpoint), func(msg []byte) ([]byte, error) {
 		mac := hmac.New(sha256.New, hmacKey)
 		mac.Write(msg)
 		return mac.Sum(nil), nil
@@ -196,7 +195,7 @@ func TestViperConfig(t *testing.T) {
 	assert.Equal(t, time.Duration(2)*time.Second, util.GetDurationOrDefault("peer.gossip.connTimeout", 0))
 	assert.Equal(t, time.Duration(300)*time.Millisecond, util.GetDurationOrDefault("peer.gossip.dialTimeout", 0))
 	assert.Equal(t, 20, util.GetIntOrDefault("peer.gossip.recvBuffSize", 0))
-	assert.Equal(t, 20, util.GetIntOrDefault("peer.gossip.sendBuffSize", 0))
+	assert.Equal(t, 200, util.GetIntOrDefault("peer.gossip.sendBuffSize", 0))
 }
 
 func TestHandshake(t *testing.T) {
@@ -221,6 +220,7 @@ func TestHandshake(t *testing.T) {
 
 	// Positive path 1 - check authentication without TLS
 	ll, err := net.Listen("tcp", fmt.Sprintf("%s:%d", "", 9611))
+	assert.NoError(t, err)
 	s := grpc.NewServer()
 	go s.Serve(ll)
 
@@ -423,7 +423,7 @@ func TestCloseConn(t *testing.T) {
 	assert.NoError(t, err, "%v", err)
 	c := &commImpl{}
 	tlsCertHash := certHashFromRawCert(tlsCfg.Certificates[0].Certificate[0])
-	connMsg := c.createConnectionMsg(common.PKIidType("pkiID"), tlsCertHash, api.PeerIdentityType("pkiID"), func(msg []byte) ([]byte, error) {
+	connMsg, _ := c.createConnectionMsg(common.PKIidType("pkiID"), tlsCertHash, api.PeerIdentityType("pkiID"), func(msg []byte) ([]byte, error) {
 		mac := hmac.New(sha256.New, hmacKey)
 		mac.Write(msg)
 		return mac.Sum(nil), nil
@@ -711,13 +711,14 @@ func TestPresumedDead(t *testing.T) {
 }
 
 func createGossipMsg() *proto.SignedGossipMessage {
-	return (&proto.GossipMessage{
+	msg, _ := (&proto.GossipMessage{
 		Tag:   proto.GossipMessage_EMPTY,
 		Nonce: uint64(rand.Int()),
 		Content: &proto.GossipMessage_DataMsg{
 			DataMsg: &proto.DataMessage{},
 		},
 	}).NoopSign()
+	return msg
 }
 
 func remotePeer(port int) *RemotePeer {

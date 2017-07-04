@@ -1,5 +1,8 @@
 #!/bin/bash
-
+# Copyright London Stock Exchange Group All Rights Reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 echo
 echo " ____    _____      _      ____    _____           _____   ____    _____ "
 echo "/ ___|  |_   _|    / \    |  _ \  |_   _|         | ____| |___ \  | ____|"
@@ -13,7 +16,7 @@ CHANNEL_NAME="$1"
 : ${TIMEOUT:="60"}
 COUNTER=1
 MAX_RETRY=5
-ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/cacerts/ca.example.com-cert.pem
+ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
 
 echo "Channel name : "$CHANNEL_NAME
 
@@ -36,7 +39,6 @@ setGlobals () {
 			CORE_PEER_ADDRESS=peer0.org1.example.com:7051
 		else
 			CORE_PEER_ADDRESS=peer1.org1.example.com:7051
-			CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
 		fi
 	else
 		CORE_PEER_LOCALMSPID="Org2MSP"
@@ -80,6 +82,7 @@ updateAnchorPeers() {
 	cat log.txt
 	verifyResult $res "Anchor peer update failed"
 	echo "===================== Anchor peers for org \"$CORE_PEER_LOCALMSPID\" on \"$CHANNEL_NAME\" is updated successfully ===================== "
+	sleep 5
 	echo
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/op/go-logging"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
@@ -206,6 +207,7 @@ func newConnection(cl proto.GossipClient, c *grpc.ClientConn, cs proto.Gossip_Go
 }
 
 type connection struct {
+	cancel       context.CancelFunc
 	info         *proto.ConnectionInfo
 	outBuff      chan *msgSending
 	logger       *logging.Logger                 // logger
@@ -241,6 +243,10 @@ func (conn *connection) close() {
 		conn.conn.Close()
 	}
 
+	if conn.cancel != nil {
+		conn.cancel()
+	}
+
 	conn.Unlock()
 
 }
@@ -254,7 +260,6 @@ func (conn *connection) send(msg *proto.SignedGossipMessage, onErr func(error)) 
 	defer conn.Unlock()
 
 	if len(conn.outBuff) == util.GetIntOrDefault("peer.gossip.sendBuffSize", defSendBuffSize) {
-		go onErr(errSendOverflow)
 		return
 	}
 

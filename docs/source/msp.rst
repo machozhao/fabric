@@ -14,7 +14,8 @@ generation and verification).
 
 A Fabric blockchain network can be governed by one or more MSPs. In this
 way Fabric offers modularity of membership operations, and interoperability
-across different membership standards and architectures.
+across different membership standards and architectures. Fabric currently
+supports PKCS #11 libraries.
 
 In the rest of this document we elaborate on the setup of the MSP
 implementation supported by Fabric, and discuss best practices concerning
@@ -31,8 +32,8 @@ members.
 
 Firstly, for each MSP a name needs to be specified in order to reference that MSP
 in the network (e.g. ``msp1``, ``org2``, and ``org3.divA``). This is the name under
-which membership rules of an MSP representing a consortium, organisation or
-organisation division is to be referenced in a channel. This is also referred
+which membership rules of an MSP representing a consortium, organization or
+organization division is to be referenced in a channel. This is also referred
 to as the *MSP Identifier* or *MSP ID*. MSP Identifiers are required to be unique per MSP
 instance. For example, shall two MSP instances with the same identifier be
 detected at the system channel genesis, orderer setup will fail.
@@ -60,6 +61,12 @@ verification. These parameters are deduced by
 - A list of certificate revocation lists (CRLs) each corresponding to
   exactly one of the listed (intermediate or root) MSP Certificate
   Authorities; this is an optional parameter
+- A list of self-signed (X.509) certificates to constitute the *TLS root of
+  trust* for TLS certificate.
+- A list of X.509 certificates to represent intermediate TLS CAs this provider
+  considers; these certificates ought to be
+  certified by exactly one of the certificates in the TLS root of trust;
+  intermediate CAs are optional parameters.
 
 *Valid*  identities for this MSP instance are required to satisfy the following conditions:
 
@@ -70,28 +77,34 @@ verification. These parameters are deduced by
   in the ``OU`` field of their X.509 certificate structure.
 
 For more information on the validity of identities in the current MSP implementation
-we refer the reader to the identity validation
-rules :doc:`msp-identity-validity-rules`.
+we refer the reader to :doc:`msp-identity-validity-rules`.
 
 In addition to verification related parameters, for the MSP to enable
 the node on which it is instantiated to sign or authenticate, one needs to
 specify:
 
-- The signing key used for signing by the node, and
+- The signing key used for signing by the node (currently only ECDSA keys are
+  supported), and
 - The node's X.509 certificate, that is a valid identity under the
   verification parameters of this MSP
+
+It is important to note that MSP identities never expire, they can only be revoked
+by adding them the appropriate CRLs. In addition, for TLS certificates,
+fabric does not offer support for revocation.
 
 How to generate MSP certificates and their signing keys?
 --------------------------------------------------------
 
 To generate X.509 certificates to feed its MSP configuration, the application
-can use `Openssl <https://www.openssl.org/>`_.
+can use `Openssl <https://www.openssl.org/>`_. We emphasise that in Hyperledger
+Fabric there is no support for certificates including RSA keys.
 
 Alternatively one can use ``cryptogen`` tool, whose operation is explained in
 :doc:`getting_started`.
 
 For fabric-ca related certificate generation, we refer the reader to the
-fabric-ca related documentation - :doc:`Setup/ca-setup`.
+fabric-ca related documentation -
+`Setup/ca-setup <http://hyperledger-fabric-ca.readthedocs.io/en/latest/>`_.
 
 MSP setup on the peer & orderer side
 ------------------------------------
@@ -116,9 +129,14 @@ and a file:
    ``OrganizationalUnitIdentifier`` represents the actual string as
    expected to appear in X.509 certificate OU-field (e.g. "COP")
 5. (optional) a folder ``crls`` to include the considered CRLs
-6. a folder ``keystore`` to include a PEM file with the node's signing key
+6. a folder ``keystore`` to include a PEM file with the node's signing key;
+   we emphasise that currently RSA keys are not supported
 7. a folder ``signcerts`` to include a PEM file with the node's X.509
    certificate
+8. (optional) a folder ``tlscacerts`` to include PEM files each corresponding to a TLS root
+   CA's certificate
+9. (optional) a folder ``tlsintermediatecerts`` to include PEM files each
+   corresponding to an intermediate TLS CA's certificate
 
 In the configuration file of the node (core.yaml file for the peer, and
 orderer.yaml for the orderer), one needs to specify the path to the
@@ -285,6 +303,13 @@ considered for that MSP's identity validation:
 In the current MSP implementation we only support method (1) as it is simpler
 and does not require blacklisting the no longer considered intermediate CA.
 
+**5) CAs and TLS CAs
+
+MSP identities' root CAs and MSP TLS certificates' root CAs (and relative intermediate CAs)
+need to be declared in different folders. This is to avoid confusion between
+different classes of certificates. Fabric does not forbid to reuse the same
+CAs for both MSP identities and TLS certificates but best practices suggest
+to avoid this in production.
+
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/
-

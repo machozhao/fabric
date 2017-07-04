@@ -17,10 +17,10 @@ import (
 )
 
 func TestBrokerConfig(t *testing.T) {
-	mockChannel1 := newChannel("channelFoo", defaultPartition)
+	mockChannel1 := newChannel(channelNameForTest(t), defaultPartition)
 	// Use a partition ID that is not the 'default' (defaultPartition)
 	var differentPartition int32 = defaultPartition + 1
-	mockChannel2 := newChannel("channelFoo", differentPartition)
+	mockChannel2 := newChannel(channelNameForTest(t), differentPartition)
 
 	mockBroker := sarama.NewMockBroker(t, 0)
 	defer func() { mockBroker.Close() }()

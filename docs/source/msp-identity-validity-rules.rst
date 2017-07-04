@@ -1,3 +1,6 @@
+MSP Identity Validity Rules
+==================================
+
 As mentioned in MSP description, MSPs may be configured with a set of root
 certificate authorities (rCAs), and optionally a set of intermediate
 certificate authorities (iCAs). An MSP's iCA certificates must be signed
@@ -36,3 +39,6 @@ If a certificate C is signed by an iCA or rCA
 for which an organisational unit has been specified in the MSP configuration,
 then C is considered valid if, among other requirements, it includes
 ou-string as part of its OU field.
+
+.. Licensed under Creative Commons Attribution 4.0 International License
+   https://creativecommons.org/licenses/by/4.0/

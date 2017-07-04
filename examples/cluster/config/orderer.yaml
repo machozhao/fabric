@@ -67,9 +67,9 @@ General:
 
     # LocalMSPID is the identity to register the local MSP material with the MSP
     # manager. IMPORTANT: The local MSP ID of an orderer needs to match the MSP
-    # ID of one of the organizations defined in the in the orderer system
-    # channel's /Channel/Orderer configuration. The sample organization defined
-    # in the sample configuration provided has an MSP ID of "DEFAULT".
+    # ID of one of the organizations defined in the orderer system channel's
+    # /Channel/Orderer configuration. The sample organization defined in the
+    # sample configuration provided has an MSP ID of "DEFAULT".
     LocalMSPID: OrdererMSP
 
     # Enable an HTTP service for Go "pprof" profiling as documented at:
@@ -110,8 +110,8 @@ General:
 FileLedger:
 
     # Location: The directory to store the blocks in.
-    # NOTE: If this is unset, a temporary location will be chosen using
-    # the prefix specified by Prefix.
+    # NOTE: If this is unset, a new temporary location will be chosen every time
+    # the orderer is restarted, using the prefix specified by Prefix.
     Location: /var/hyperledger/fabric/orderer
 
     # The prefix to use when generating a ledger directory in temporary space.
@@ -148,19 +148,16 @@ Kafka:
     # or if a metadata request to the Kafka cluster needs to be repeated.
     Retry:
         # When a new channel is created, or when an existing channel is reloaded
-        # (as part of the orderer's bootstrapping), the orderer interacts with
-        # the Kafka cluster in the following ways:
+        # (in case of a just-restarted orderer), the orderer interacts with the
+        # Kafka cluster in the following ways:
         # 1. It creates a Kafka producer (writer) for the Kafka partition that
         # corresponds to the channel.
         # 2. It uses that producer to post a no-op CONNECT message to that
         # partition
         # 3. It creates a Kafka consumer (reader) for that partition.
-        # If any of these steps fails, they will be re-attempted every
+        # If any of these steps fail, they will be re-attempted every
         # <ShortInterval> for a total of <ShortTotal>, and then every
-        # <LongInterval> for a total of <LongTotal> until they succeed:
-        # 1. Creation of Kafka producer (writer) for the channel
-        # 2. Creation of Kafka consumer (reader) for the channel
-        # 3. Posting of no-op CONNECT message to the channel
+        # <LongInterval> for a total of <LongTotal> until they succeed.
         # Note that the orderer will be unable to write to or read from a
         # channel until all of the steps above have been completed successfully.
         ShortInterval: 5s
@@ -224,3 +221,6 @@ Kafka:
         # following "File" key and specify the file name from which to load the
         # value of RootCAs.
         #File: path/to/RootCAs
+
+    # Kafka version of the Kafka cluster brokers (defaults to 0.9.0.1)
+    Version:

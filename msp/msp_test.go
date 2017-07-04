@@ -122,8 +122,8 @@ func TestMSPSetupNoCryptoConf(t *testing.T) {
 func TestGetters(t *testing.T) {
 	typ := localMsp.GetType()
 	assert.Equal(t, typ, FABRIC)
-	assert.NotNil(t, localMsp.GetRootCerts())
-	assert.NotNil(t, localMsp.GetIntermediateCerts())
+	assert.NotNil(t, localMsp.GetTLSRootCerts())
+	assert.NotNil(t, localMsp.GetTLSIntermediateCerts())
 }
 
 func TestMSPSetupBad(t *testing.T) {
@@ -266,6 +266,22 @@ func TestValidateCAIdentity(t *testing.T) {
 	caID := getIdentity(t, cacerts)
 
 	err := localMsp.Validate(caID)
+	assert.Error(t, err)
+}
+
+func TestBadAdminIdentity(t *testing.T) {
+	conf, err := GetLocalMspConfig("testdata/badadmin", nil, "DEFAULT")
+	assert.NoError(t, err)
+
+	thisMSP, err := NewBccspMsp()
+	assert.NoError(t, err)
+	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/badadmin", "keystore"), true)
+	assert.NoError(t, err)
+	csp, err := sw.New(256, "SHA2", ks)
+	assert.NoError(t, err)
+	thisMSP.(*bccspmsp).bccsp = csp
+
+	err = thisMSP.Setup(conf)
 	assert.Error(t, err)
 }
 

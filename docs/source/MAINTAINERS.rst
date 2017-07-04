@@ -38,6 +38,8 @@ Maintainers
 +---------------------------+---------------------+------------------+----------------+--------------------------------+
 | Yacov Manevich            | yacovm              | yacovm           | yacovm         | yacovm@il.ibm.com              |
 +---------------------------+---------------------+------------------+----------------+--------------------------------+
+| Yaoguo Jiang              | jiangyaoguo         | jiangyaoguo      | jiangyaoguo    | jiangyaoguo@gmail.com          |
++---------------------------+---------------------+------------------+----------------+--------------------------------+
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/

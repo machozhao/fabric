@@ -45,10 +45,7 @@ const (
 	defConnTimeout  = time.Second * time.Duration(2)
 	defRecvBuffSize = 20
 	defSendBuffSize = 20
-	sendOverflowErr = "Send buffer overflow"
 )
-
-var errSendOverflow = errors.New(sendOverflowErr)
 
 // SetDialTimeout sets the dial timeout
 func SetDialTimeout(timeout time.Duration) {
@@ -155,7 +152,6 @@ type commImpl struct {
 	subscriptions  []chan proto.ReceivedMessage
 	port           int
 	stopping       int32
-	skipHandshake  bool
 }
 
 func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidType) (*connection, error) {
@@ -187,7 +183,8 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 		return nil, err
 	}
 
-	if stream, err = cl.GossipStream(context.Background()); err == nil {
+	ctx, cf := context.WithCancel(context.Background())
+	if stream, err = cl.GossipStream(ctx); err == nil {
 		connInfo, err = c.authenticateRemotePeer(stream)
 		if err == nil {
 			pkiID = connInfo.ID
@@ -201,6 +198,7 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 			conn.pkiID = pkiID
 			conn.info = connInfo
 			conn.logger = c.logger
+			conn.cancel = cf
 
 			h := func(m *proto.SignedGossipMessage) {
 				c.logger.Debug("Got message:", m)
@@ -433,7 +431,10 @@ func (c *commImpl) authenticateRemotePeer(stream stream) (*proto.ConnectionInfo,
 		return nil, errors.New("No TLS certificate")
 	}
 
-	cMsg = c.createConnectionMsg(c.PKIID, c.selfCertHash, c.peerIdentity, signer)
+	cMsg, err = c.createConnectionMsg(c.PKIID, c.selfCertHash, c.peerIdentity, signer)
+	if err != nil {
+		return nil, err
+	}
 
 	c.logger.Debug("Sending", cMsg, "to", remoteAddress)
 	stream.Send(cMsg.Envelope)
@@ -580,7 +581,7 @@ func readWithTimeout(stream interface{}, timeout time.Duration, address string) 
 	}
 }
 
-func (c *commImpl) createConnectionMsg(pkiID common.PKIidType, certHash []byte, cert api.PeerIdentityType, signer proto.Signer) *proto.SignedGossipMessage {
+func (c *commImpl) createConnectionMsg(pkiID common.PKIidType, certHash []byte, cert api.PeerIdentityType, signer proto.Signer) (*proto.SignedGossipMessage, error) {
 	m := &proto.GossipMessage{
 		Tag:   proto.GossipMessage_EMPTY,
 		Nonce: 0,
@@ -595,8 +596,8 @@ func (c *commImpl) createConnectionMsg(pkiID common.PKIidType, certHash []byte, 
 	sMsg := &proto.SignedGossipMessage{
 		GossipMessage: m,
 	}
-	sMsg.Sign(signer)
-	return sMsg
+	_, err := sMsg.Sign(signer)
+	return sMsg, err
 }
 
 type stream interface {

@@ -628,9 +628,20 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
 	sMsg := &proto.SignedGossipMessage{
 		GossipMessage: msg,
 	}
-	sMsg.Sign(func(msg []byte) ([]byte, error) {
-		return g.mcs.Sign(msg)
-	})
+
+	var err error
+	if sMsg.IsDataMsg() {
+		sMsg, err = sMsg.NoopSign()
+	} else {
+		_, err = sMsg.Sign(func(msg []byte) ([]byte, error) {
+			return g.mcs.Sign(msg)
+		})
+	}
+
+	if err != nil {
+		g.logger.Warning("Failed signing message:", err)
+		return
+	}
 
 	if msg.IsChannelRestricted() {
 		gc := g.chanState.getGossipChannelByChainID(msg.Channel)
@@ -651,7 +662,12 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
 
 // Send sends a message to remote peers
 func (g *gossipServiceImpl) Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer) {
-	g.comm.Send(msg.NoopSign(), peers...)
+	m, err := msg.NoopSign()
+	if err != nil {
+		g.logger.Warning("Failed creating SignedGossipMessage:", err)
+		return
+	}
+	g.comm.Send(m, peers...)
 }
 
 // GetPeers returns a mapping of endpoint --> []discovery.NetworkMember
@@ -845,7 +861,10 @@ func (da *discoveryAdapter) SendToPeer(peer *discovery.NetworkMember, msg *proto
 			MemReq: memReq,
 		}
 		// Update the envelope of the outer message, no need to sign (point2point)
-		msg = msg.NoopSign()
+		msg, err = msg.NoopSign()
+		if err != nil {
+			return
+		}
 	}
 	da.c.Send(msg, &comm.RemotePeer{PKIID: peer.PKIid, Endpoint: peer.PreferredEndpoint()})
 }
@@ -916,7 +935,7 @@ func (sa *discoverySecurityAdapter) ValidateAliveMsg(m *proto.SignedGossipMessag
 	}
 
 	if identity == nil {
-		sa.logger.Warning("Don't have certificate for", am)
+		sa.logger.Debug("Don't have certificate for", am)
 		return false
 	}
 
@@ -934,7 +953,12 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
 	sMsg := &proto.SignedGossipMessage{
 		GossipMessage: m,
 	}
-	e := sMsg.Sign(signer)
+	e, err := sMsg.Sign(signer)
+	if err != nil {
+		sa.logger.Warning("Failed signing message:", err)
+		return nil
+	}
+
 	if internalEndpoint == "" {
 		return e
 	}
@@ -1084,8 +1108,8 @@ func (g *gossipServiceImpl) createStateInfoMsg(metadata []byte, chainID common.C
 	signer := func(msg []byte) ([]byte, error) {
 		return g.mcs.Sign(msg)
 	}
-	sMsg.Sign(signer)
-	return sMsg, nil
+	_, err := sMsg.Sign(signer)
+	return sMsg, err
 }
 
 func (g *gossipServiceImpl) hasExternalEndpoint(PKIID common.PKIidType) bool {

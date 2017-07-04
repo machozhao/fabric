@@ -102,8 +102,9 @@ func GetChain() *ChaincodeSupport {
 	return theChaincodeSupport
 }
 
-//call this under lock
 func (chaincodeSupport *ChaincodeSupport) preLaunchSetup(chaincode string) chan bool {
+	chaincodeSupport.runningChaincodes.Lock()
+	defer chaincodeSupport.runningChaincodes.Unlock()
 	//register placeholder Handler. This will be transferred in registerHandler
 	//NOTE: from this point, existence of handler for this chaincode means the chaincode
 	//is in the process of getting started (or has been started)
@@ -119,7 +120,7 @@ func (chaincodeSupport *ChaincodeSupport) chaincodeHasBeenLaunched(chaincode str
 }
 
 // NewChaincodeSupport creates a new ChaincodeSupport instance
-func NewChaincodeSupport(getPeerEndpoint func() (*pb.PeerEndpoint, error), userrunsCC bool, ccstartuptimeout time.Duration) *ChaincodeSupport {
+func NewChaincodeSupport(getCCEndpoint func() (*pb.PeerEndpoint, error), userrunsCC bool, ccstartuptimeout time.Duration) *ChaincodeSupport {
 	ccprovider.SetChaincodesPath(config.GetPath("peer.fileSystemPath") + string(filepath.Separator) + "chaincodes")
 
 	pnid := viper.GetString("peer.networkId")
@@ -129,12 +130,12 @@ func NewChaincodeSupport(getPeerEndpoint func() (*pb.PeerEndpoint, error), userr
 
 	//initialize global chain
 
-	peerEndpoint, err := getPeerEndpoint()
+	ccEndpoint, err := getCCEndpoint()
 	if err != nil {
-		chaincodeLogger.Errorf("Error getting PeerEndpoint, using peer.address: %s", err)
-		theChaincodeSupport.peerAddress = viper.GetString("peer.address")
+		chaincodeLogger.Errorf("Error getting chaincode endpoint, using chaincode.peerAddress: %s", err)
+		theChaincodeSupport.peerAddress = viper.GetString("chaincode.peerAddress")
 	} else {
-		theChaincodeSupport.peerAddress = peerEndpoint.Address
+		theChaincodeSupport.peerAddress = ccEndpoint.Address
 	}
 	chaincodeLogger.Infof("Chaincode support using peerAddress: %s\n", theChaincodeSupport.peerAddress)
 	//peerAddress = viper.GetString("peer.address")
@@ -261,6 +262,11 @@ func (chaincodeSupport *ChaincodeSupport) registerHandler(chaincodehandler *Hand
 		chaincodehandler.readyNotify = chrte2.handler.readyNotify
 		chrte2.handler = chaincodehandler
 	} else {
+		if chaincodeSupport.userRunsCC == false {
+			//this chaincode was not launched by the peer and is attempting
+			//to register. Don't allow this.
+			return fmt.Errorf("peer will not accepting external chaincode connection %v (except in dev mode)", chaincodehandler.ChaincodeID)
+		}
 		chaincodeSupport.runningChaincodes.chaincodeMap[key] = &chaincodeRTEnv{handler: chaincodehandler}
 	}
 
@@ -314,7 +320,7 @@ func (chaincodeSupport *ChaincodeSupport) sendReady(context context.Context, ccc
 	var notfy chan *pb.ChaincodeMessage
 	var err error
 	if notfy, err = chrte.handler.ready(context, cccid.ChainID, cccid.TxID, cccid.SignedProposal, cccid.Proposal); err != nil {
-		return fmt.Errorf("Error sending %s: %s", pb.ChaincodeMessage_INIT, err)
+		return fmt.Errorf("Error sending %s: %s", pb.ChaincodeMessage_READY, err)
 	}
 	if notfy != nil {
 		select {
@@ -405,8 +411,6 @@ func (chaincodeSupport *ChaincodeSupport) launchAndWaitForRegister(ctxt context.
 		return fmt.Errorf("Error chaincode is being launched: %s", canName)
 	}
 
-	//chaincodeHasBeenLaunch false... its not in the map, add it and proceed to launch
-	notfy := chaincodeSupport.preLaunchSetup(canName)
 	chaincodeSupport.runningChaincodes.Unlock()
 
 	//launch the chaincode
@@ -422,7 +426,16 @@ func (chaincodeSupport *ChaincodeSupport) launchAndWaitForRegister(ctxt context.
 
 	vmtype, _ := chaincodeSupport.getVMType(cds)
 
-	sir := container.StartImageReq{CCID: ccintf.CCID{ChaincodeSpec: cds.ChaincodeSpec, NetworkID: chaincodeSupport.peerNetworkID, PeerID: chaincodeSupport.peerID, Version: cccid.Version}, Builder: builder, Args: args, Env: env}
+	//set up the shadow handler JIT before container launch to
+	//reduce window of when an external chaincode can sneak in
+	//and use the launching context and make it its own
+	var notfy chan bool
+	preLaunchFunc := func() error {
+		notfy = chaincodeSupport.preLaunchSetup(canName)
+		return nil
+	}
+
+	sir := container.StartImageReq{CCID: ccintf.CCID{ChaincodeSpec: cds.ChaincodeSpec, NetworkID: chaincodeSupport.peerNetworkID, PeerID: chaincodeSupport.peerID, Version: cccid.Version}, Builder: builder, Args: args, Env: env, PrelaunchFunc: preLaunchFunc}
 
 	ipcCtxt := context.WithValue(ctxt, ccintf.GetCCHandlerKey(), chaincodeSupport)
 
@@ -589,7 +602,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 				}
 
 				cds = ccpack.GetDepSpec()
-				chaincodeLogger.Debugf("launchAndWaitForRegister fetched %d from file system", len(cds.CodePackage), err)
+				chaincodeLogger.Debugf("launchAndWaitForRegister fetched %d bytes from file system", len(cds.CodePackage))
 			}
 		}
 

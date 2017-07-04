@@ -24,6 +24,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
+	"github.com/hyperledger/fabric/common/genesis"
 	"github.com/hyperledger/fabric/common/localmsp"
 	"github.com/hyperledger/fabric/common/mocks/scc"
 	"github.com/hyperledger/fabric/common/policies"
@@ -199,7 +200,8 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	identity, _ := mgmt.GetLocalSigningIdentityOrPanic().Serialize()
 	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, localmsp.NewSigner(), mgmt.NewDeserializersManager())
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
-	service.InitGossipServiceCustomDeliveryFactory(identity, peerEndpoint, nil, &mockDeliveryClientFactory{}, messageCryptoService, secAdv, nil)
+	err := service.InitGossipServiceCustomDeliveryFactory(identity, peerEndpoint, nil, &mockDeliveryClientFactory{}, messageCryptoService, secAdv, nil)
+	assert.NoError(t, err)
 
 	// Successful path for JoinChain
 	blockBytes := mockConfigBlock()
@@ -272,6 +274,33 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	if len(cqr.GetChannels()) != 1 {
 		t.FailNow()
 	}
+}
+
+func TestPeerConfiger_SubmittingOrdererGenesis(t *testing.T) {
+	viper.Set("peer.fileSystemPath", "/tmp/hyperledgertest/")
+	os.Mkdir("/tmp/hyperledgertest", 0755)
+	defer os.RemoveAll("/tmp/hyperledgertest/")
+
+	e := new(PeerConfiger)
+	stub := shim.NewMockStub("PeerConfiger", e)
+
+	if res := stub.MockInit("1", nil); res.Status != shim.OK {
+		fmt.Println("Init failed", string(res.Message))
+		t.FailNow()
+	}
+
+	block, err := genesis.NewFactoryImpl(configtxtest.OrdererTemplate()).Block("testChainID")
+	assert.NoError(t, err)
+	blockBytes := utils.MarshalOrPanic(block)
+
+	// Failed path: wrong parameter type
+	args := [][]byte{[]byte("JoinChain"), []byte(blockBytes)}
+	if res := stub.MockInvoke("2", args); res.Status == shim.OK {
+		t.Fatalf("cscc invoke JoinChain should have failed with wrong genesis block.  args: %v", args)
+	} else {
+		assert.Contains(t, res.Message, "missing Application configuration group")
+	}
+
 }
 
 func mockConfigBlock() []byte {

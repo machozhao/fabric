@@ -120,12 +120,12 @@ var logger = util.GetLogger(util.LoggingServiceModule, "")
 
 // InitGossipService initialize gossip service
 func InitGossipService(peerIdentity []byte, endpoint string, s *grpc.Server, mcs api.MessageCryptoService,
-	secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) {
+	secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) error {
 	// TODO: Remove this.
 	// TODO: This is a temporary work-around to make the gossip leader election module load its logger at startup
 	// TODO: in order for the flogging package to register this logger in time so it can set the log levels as requested in the config
 	util.GetLogger(util.LoggingElectionModule, "")
-	InitGossipServiceCustomDeliveryFactory(peerIdentity, endpoint, s, &deliveryFactoryImpl{},
+	return InitGossipServiceCustomDeliveryFactory(peerIdentity, endpoint, s, &deliveryFactoryImpl{},
 		mcs, secAdv, secureDialOpts, bootPeers...)
 }
 
@@ -133,7 +133,9 @@ func InitGossipService(peerIdentity []byte, endpoint string, s *grpc.Server, mcs
 // implementation, might be useful for testing and mocking purposes
 func InitGossipServiceCustomDeliveryFactory(peerIdentity []byte, endpoint string, s *grpc.Server,
 	factory DeliveryServiceFactory, mcs api.MessageCryptoService, secAdv api.SecurityAdvisor,
-	secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) {
+	secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) error {
+	var err error
+	var gossip gossip.Gossip
 	once.Do(func() {
 		if overrideEndpoint := viper.GetString("peer.gossip.endpoint"); overrideEndpoint != "" {
 			endpoint = overrideEndpoint
@@ -142,7 +144,7 @@ func InitGossipServiceCustomDeliveryFactory(peerIdentity []byte, endpoint string
 		logger.Info("Initialize gossip with endpoint", endpoint, "and bootstrap set", bootPeers)
 
 		idMapper := identity.NewIdentityMapper(mcs, peerIdentity)
-		gossip := integration.NewGossipComponent(peerIdentity, endpoint, s, secAdv,
+		gossip, err = integration.NewGossipComponent(peerIdentity, endpoint, s, secAdv,
 			mcs, idMapper, secureDialOpts, bootPeers...)
 		gossipServiceInstance = &gossipServiceImpl{
 			mcs:             mcs,
@@ -155,6 +157,7 @@ func InitGossipServiceCustomDeliveryFactory(peerIdentity []byte, endpoint string
 			secAdv:          secAdv,
 		}
 	})
+	return err
 }
 
 // GetGossipService returns an instance of gossip service
@@ -262,7 +265,7 @@ func (g *gossipServiceImpl) Stop() {
 	}
 
 	for chainID, electionService := range g.leaderElection {
-		logger.Info("Stopping leader election for %s", chainID)
+		logger.Infof("Stopping leader election for %s", chainID)
 		electionService.Stop()
 	}
 	g.gossipSvc.Stop()
@@ -289,10 +292,12 @@ func (g *gossipServiceImpl) amIinChannel(myOrg string, config Config) bool {
 func (g *gossipServiceImpl) onStatusChangeFactory(chainID string, committer blocksprovider.LedgerInfo) func(bool) {
 	return func(isLeader bool) {
 		if isLeader {
+			logger.Info("Elected as a leader, starting delivery service for channel", chainID)
 			if err := g.deliveryService.StartDeliverForChannel(chainID, committer); err != nil {
 				logger.Error("Delivery service is not able to start blocks delivery for chain, due to", err)
 			}
 		} else {
+			logger.Info("Renounced leadership, stopping delivery service for channel", chainID)
 			if err := g.deliveryService.StopDeliverForChannel(chainID); err != nil {
 				logger.Error("Delivery service is not able to stop blocks delivery for chain, due to", err)
 			}

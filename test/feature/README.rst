@@ -32,7 +32,7 @@ The following are links to the Jenkins execution of these tests:
 Pre-requisites
 --------------
 You must have the following installed:
-    * `python`_
+    * `python`_ (You must have 2.7 due to package incompatibilities)
     * `docker`_
     * `docker-compose`_
 
@@ -71,6 +71,19 @@ You should also clone the following repositories
 
 .. _hyperledger-fabric: https://github.com/hyperledger/fabric
 .. _hyperledger-fabric-ca: https://github.com/hyperledger/fabric-ca
+
+================
+Using VirtualEnv
+================
+It is also possible to execute these tests using `virtualenv`_. This allows for you to control your environment and ensure that the version of python and any other environment settings will be exactly what is needed regardless of the environment of the native machine.
+
+.. _virtualenv: http://docs.python-guide.org/en/latest/dev/virtualenvs/
+
+There are instructions for setting up a virtualenv for executing behave tests located at ``bddtests/README.md``.  Once these steps are completed and you have successfully setup the ``behave_venv`` virtual environment, execute the following before executing these behave tests.
+
+::
+
+    $ workon behave_venv
 
 
 Getting Started
@@ -115,7 +128,7 @@ The docker images for ``peer``, ``orderer``, ``kafka``, and ``zookeeper`` are ne
 =========================
 Building tool executables
 =========================
-The **configtxgen** and **cryptogen** tools are used when bootstrapping the networks in these tests. As a result, you must perform a ``make configtxgen && make cryptogen`` in the ``/path/to/hyperledger/fabric`` directory. 
+The **configtxgen** and **cryptogen** tools are used when bootstrapping the networks in these tests. As a result, you must perform a ``make configtxgen && make cryptogen`` in the ``/path/to/hyperledger/fabric`` directory.
 
 
 How to Contribute
@@ -204,7 +217,7 @@ Python implementation steps are identified using decorators which match the keyw
 ====================
 Docker-Compose Files
 ====================
-These docker composition files are used when setting up and tearing down networks of different configurations. Different tests can use different docker compose files depending on the test scenario. We are currently using `version 2 docker compose`_ files. 
+These docker composition files are used when setting up and tearing down networks of different configurations. Different tests can use different docker compose files depending on the test scenario. We are currently using `version 2 docker compose`_ files.
 
 .. _version 2 docker compose: https://docs.docker.com/compose/compose-file/compose-file-v2/
 
@@ -274,3 +287,6 @@ Helpful Docker Commands
       * ``$ docker networks ls``
    * Remove a specific residual network
       * ``$ docker networks rm <network_name>``
+
+.. Licensed under Creative Commons Attribution 4.0 International License
+   https://creativecommons.org/licenses/by/4.0/

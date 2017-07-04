@@ -26,10 +26,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/pkg/testutil/assert"
 	"github.com/hyperledger/fabric/core/config"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func testerr(err error, succ bool) error {
@@ -154,7 +154,7 @@ func Test_DeploymentPayload(t *testing.T) {
 	}
 
 	payload, err := platform.GetDeploymentPayload(spec)
-	assert.NilError(t, err)
+	assert.NoError(t, err)
 
 	t.Logf("payload size: %d", len(payload))
 
@@ -260,6 +260,7 @@ func TestGenerateDockerBuild(t *testing.T) {
 	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/nowhere", File: "/bin/warez", Mode: 0100400, SuccessExpected: false})
 	specs = append(specs, spec{CCName: "invalidhttp", Path: "https://not/a/valid/path", File: "/src/github.com/hyperledger/fabric/examples/chaincode/go/map/map.go", Mode: 0100400, SuccessExpected: false, RealGen: true})
 	specs = append(specs, spec{CCName: "map", Path: "github.com/hyperledger/fabric/examples/chaincode/go/map", File: "/src/github.com/hyperledger/fabric/examples/chaincode/go/map/map.go", Mode: 0100400, SuccessExpected: true, RealGen: true})
+	specs = append(specs, spec{CCName: "AutoVendor", Path: "github.com/hyperledger/fabric/test/chaincodes/AutoVendor/chaincode", File: "/src/github.com/hyperledger/fabric/test/chaincodes/AutoVendor/chaincode/main.go", Mode: 0100400, SuccessExpected: true, RealGen: true})
 	specs = append(specs, spec{CCName: "mapBadPath", Path: "github.com/hyperledger/fabric/examples/chaincode/go/map", File: "/src/github.com/hyperledger/fabric/examples/bad/path/to/map.go", Mode: 0100400, SuccessExpected: false})
 	specs = append(specs, spec{CCName: "mapBadMode", Path: "github.com/hyperledger/fabric/examples/chaincode/go/map", File: "/src/github.com/hyperledger/fabric/examples/chaincode/go/map/map.go", Mode: 0100555, SuccessExpected: false})
 
