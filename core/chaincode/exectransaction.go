@@ -52,6 +52,11 @@ func Execute(ctxt context.Context, cccid *ccprovider.CCContext, spec interface{}
 		return nil, nil, fmt.Errorf("Failed to transaction message(%s)", err)
 	}
 
+	chaincodeLogger.Infof("Before Execute chaincode, id: %s", cccid.ChainID)
+	chaincodeLogger.Infof("Before Execute chaincode, name: %s", cccid.Name)
+	chaincodeLogger.Infof("Before Execute chaincode, version: %s", cccid.Version)
+	//chaincodeLogger.Infof("Before Execute chaincode, args[0]: %s", fmt.Sprintf("%s", ci.ChaincodeSpec.Input.Args[0]))
+
 	resp, err := theChaincodeSupport.Execute(ctxt, cccid, ccMsg, theChaincodeSupport.executetimeout)
 	if err != nil {
 		// Rollback transaction
